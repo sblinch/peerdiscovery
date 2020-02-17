@@ -300,9 +300,10 @@ func (p *peerDiscovery) listen() (recievedBytes []byte, err error) {
 		c.Close()
 	}()
 
+	buffer := make([]byte, maxDatagramSize)
+
 	// Loop forever reading from the socket
 	for {
-		buffer := make([]byte, maxDatagramSize)
 		var (
 			n       int
 			src     net.Addr
@@ -322,16 +323,25 @@ func (p *peerDiscovery) listen() (recievedBytes []byte, err error) {
 
 		// log.Println(src, hex.Dump(buffer[:n]))
 
+		var payload []byte
+
 		p.Lock()
 		if _, ok := p.received[srcHost]; !ok {
-			p.received[srcHost] = buffer[:n]
+			payload = make([]byte,n)
+			copy(payload,buffer[:n])
+
+			p.received[srcHost] = payload
 		}
 		p.Unlock()
 
 		if notify != nil {
+			if payload == nil {
+				payload = make([]byte,n)
+				copy(payload,buffer[:n])
+			}
 			notify(Discovered{
 				Address: srcHost,
-				Payload: buffer[:n],
+				Payload: payload,
 			})
 		}
 
