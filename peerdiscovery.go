@@ -10,7 +10,7 @@ import (
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 	"bytes"
-)
+	)
 
 // IPVersion specifies the version of the Internet Protocol to be used.
 type IPVersion uint
@@ -39,7 +39,7 @@ func (d Discovered) String() string {
 type Settings struct {
 	// Limit is the number of peers to discover, use < 1 for unlimited.
 	Limit int
-	// Port is the port to broadcast on (the peers must also broadcast using the same port).
+	// port is the port to broadcast on (the peers must also broadcast using the same port).
 	// The default port is 9999.
 	Port string
 	// MulticastAddress specifies the multicast address.
@@ -200,8 +200,8 @@ func Discover(settings ...Settings) (discoveries []Discovered, err error) {
 	ticker := time.NewTicker(tickerDuration)
 	defer ticker.Stop()
 	start := time.Now()
+	exit := false
 	for {
-		exit := false
 
 		p.RLock()
 		if len(p.received) >= p.settings.Limit && p.settings.Limit > 0 {
