@@ -77,6 +77,7 @@ type peerDiscovery struct {
 
 	received map[string][]byte
 	sync.RWMutex
+	stopchan chan struct {}
 }
 
 // initialize returns a new peerDiscovery object which can be used to discover peers.
@@ -186,7 +187,11 @@ func Discover(settings ...Settings) (discoveries []Discovered, err error) {
 		p2.JoinGroup(&ifaces[i], &net.UDPAddr{IP: group, Port: portNum})
 	}
 
+	p.stopchan = make(chan struct{})
+	defer close(p.stopchan)
+
 	go p.listen()
+
 	ticker := time.NewTicker(tickerDuration)
 	defer ticker.Stop()
 	start := time.Now()
@@ -288,6 +293,12 @@ func (p *peerDiscovery) listen() (recievedBytes []byte, err error) {
 	for i := range ifaces {
 		p2.JoinGroup(&ifaces[i], &net.UDPAddr{IP: group, Port: portNum})
 	}
+
+	go func() {
+		// when Discover() exits, close our listening socket to terminate the below for loop with a read error
+		<-p.stopchan
+		c.Close()
+	}()
 
 	// Loop forever reading from the socket
 	for {
