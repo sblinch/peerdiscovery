@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
+	"bytes"
 )
 
 // IPVersion specifies the version of the Internet Protocol to be used.
@@ -48,6 +49,10 @@ type Settings struct {
 	MulticastAddress string
 	// Payload is the bytes that are sent out with each broadcast. Must be short.
 	Payload []byte
+	// MatchPayload ignores incoming packets whose payloads do not match the locally-configured
+	// Payload. It also causes the payload to be discarded and not provided to Notify (etc.)
+	// to avoid unnecessary allocations.
+	MatchPayload bool
 	// Delay is the amount of time between broadcasts. The default delay is 1 second.
 	Delay time.Duration
 	// TimeLimit is the amount of time to spend discovering, if the limit is not reached.
@@ -260,11 +265,17 @@ const (
 // Listen binds to the UDP address and port given and writes packets received
 // from that address to a buffer which is passed to a hander
 func (p *peerDiscovery) listen() (recievedBytes []byte, err error) {
+	var expectedPayload []byte
 	p.RLock()
 	address := net.JoinHostPort(p.settings.MulticastAddress, p.settings.Port)
 	portNum := p.settings.portNum
 	allowSelf := p.settings.AllowSelf
 	notify := p.settings.Notify
+	matchPayload := p.settings.MatchPayload
+	if matchPayload {
+		expectedPayload = make([]byte,len(p.settings.Payload))
+		copy(expectedPayload,p.settings.Payload)
+	}
 	p.RUnlock()
 	localIPs := getLocalIPs()
 
@@ -321,21 +332,27 @@ func (p *peerDiscovery) listen() (recievedBytes []byte, err error) {
 			continue
 		}
 
+		if matchPayload && !bytes.Equal(buffer[:n],expectedPayload) {
+			continue
+		}
+
 		// log.Println(src, hex.Dump(buffer[:n]))
 
 		var payload []byte
 
 		p.Lock()
 		if _, ok := p.received[srcHost]; !ok {
-			payload = make([]byte,n)
-			copy(payload,buffer[:n])
+			if !matchPayload {
+				payload = make([]byte, n)
+				copy(payload, buffer[:n])
+			}
 
 			p.received[srcHost] = payload
 		}
 		p.Unlock()
 
 		if notify != nil {
-			if payload == nil {
+			if payload == nil && !matchPayload {
 				payload = make([]byte,n)
 				copy(payload,buffer[:n])
 			}
